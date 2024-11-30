@@ -25,6 +25,9 @@ class ForecastRequest(BaseModel):
     crs:str
     parameter:str
 
+class MultipleForecastRequests(BaseModel):
+    items: List[ForecastRequest]
+
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -52,13 +55,10 @@ async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequest
             response = await client.get(climate_url, params=climate_params)
             if response.status_code !=200:
                 raise HTTPException(status_code=response.status_code, detail=response.text)
-
-            return processor.process_data(jsonData=response.json(), transformer=transformer, parameter=weather_request.parameter)
-            #timestamps = [feature['properties']['from'][:13] for feature in response_data['features']]
-            #values = [feature['properties']['value'] for feature in response_data['features']]
-            #return {'parameterId': weather_request.parameter,
-            #        'timestamps':timestamps, 
-            #        'values':values}
+            else:
+                return processor.process_data(jsonData=response.json(), 
+                                          transformer=transformer, 
+                                          parameter=weather_request.parameter)
 
     if isinstance(request, WeatherRequest):
         return await fetch_weather_data(request)
@@ -76,40 +76,36 @@ async def query_energy_api(request:EnergyRequest):
 
 
 @app.post("/forecast")
-async def query_forecast_api(request:ForecastRequest): 
+async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequests]): 
     dmi_forcast_api_key = '37d18777-8ab0-44c9-bb26-113e6925338d'
     forecast_url = 'https://dmigw.govcloud.dk/v1/forecastedr/collections/harmonie_dini_sf/position'
-    forecast_params = {
-                        'coords':request.coords,
-                        'crs':request.crs,
-                        'parameter-name':request.parameter,
-                        'api-key':dmi_forcast_api_key
-                        }
-    try:
+    transformer = Transformer()
+    processor = ForecastDataProcessor()
+    async def fetch_forecast_data(forecast_request:ForecastRequest):
+        forecast_params = {
+                            'coords':forecast_request.coords,
+                            'crs':forecast_request.crs,
+                            'parameter-name':forecast_request.parameter,
+                            'api-key':dmi_forcast_api_key
+                            }
         async with httpx.AsyncClient() as client:
             response = await client.get(forecast_url, params=forecast_params)
-            logging.info(f"Status Code: {response.status_code}")  # Debugging info
-        if response.status_code !=200:
-            return JSONResponse({
-                "status": "error",
-                "message": f"Failed to fetch data. HTTP Status Code: {response.status_code}",
-                "response": response.text,  # Include raw response for debugging
-            },
-            status_code=response.status_code
-            ) 
-        else:
-            response_data = response.json()
-            return response_data
+            if response.status_code !=200:
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+            else:
+                return processor.process_data(jsonData=response.json(),
+                                                transformer=transformer,
+                                                parameter=forecast_request.parameter)
 
-    except httpx.RequestError as e:
-        # Handle network-related errors
-        raise HTTPException(status_code=503, detail=f"Network error occurred: {str(e)}")
-    except KeyError as e:
-        # Handle missing keys in the response
-        raise HTTPException(status_code=500, detail=f"Malformed response from API: {str(e)}")
-    except Exception as e:
-        # Catch-all for unexpected errors
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+    if isinstance(request, ForecastRequest):
+        return await fetch_forecast_data(request)
+    elif isinstance(request, MultipleForecastRequests):
+        results = []
+        for item in request.items:
+            result = await fetch_forecast_data(item)
+            results.append(result)
+        return {'results': results}
+
 
 def main():
     pass
