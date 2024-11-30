@@ -38,6 +38,8 @@ def read_root():
 async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequests]):
     dmi_climate_api_key="855fff42-4838-4bb1-91fd-8655bbd9ecd9"
     climate_url = "https://dmigw.govcloud.dk/v2/climateData/collections/countryValue/items?"
+    processor = HistoricalWeatherDataProcessor()
+    transformer = Transformer()
     async def fetch_weather_data(weather_request:WeatherRequest):
         climate_params = {
                       "limit":weather_request.limit,
@@ -50,12 +52,13 @@ async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequest
             response = await client.get(climate_url, params=climate_params)
             if response.status_code !=200:
                 raise HTTPException(status_code=response.status_code, detail=response.text)
-            response_data = response.json()
-            timestamps = [feature['properties']['from'][:13] for feature in response_data['features']]
-            values = [feature['properties']['value'] for feature in response_data['features']]
-            return {'parameterId': weather_request.parameter,
-                    'timestamps':timestamps, 
-                    'values':values}
+
+            return processor.process_data(jsonData=response.json(), transformer=transformer, parameter=weather_request.parameter)
+            #timestamps = [feature['properties']['from'][:13] for feature in response_data['features']]
+            #values = [feature['properties']['value'] for feature in response_data['features']]
+            #return {'parameterId': weather_request.parameter,
+            #        'timestamps':timestamps, 
+            #        'values':values}
 
     if isinstance(request, WeatherRequest):
         return await fetch_weather_data(request)
@@ -63,7 +66,6 @@ async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequest
         results = []
         for item in request.items:
             result = await fetch_weather_data(item)
-            print(result)
             results.append(result)
         return {'results': results}
 

@@ -27,23 +27,13 @@ class DataProcessor(ABC):
 	def process_data():
 		pass
 
-class HistoricalDataProcessor(DataProcessor):
-	def process_data(self, jsonData:dict, tranformer:Transformer)->pd.DataFrame:
-		if not jsonData:
-			print("Error: Missing json data")
-		try:
-			timestamps = [feature['properties']['from'][:13] for feature in jsonData]
-			y_data = [feature['properties']['value'] for feature in jsonData]
-			if not timestamps:
-				raise Exception("Error: Missing data for timestamps")
-			if not y_data:
-				raise Exception("Error: Missing data for values")
-		except KeyError as e:
-			raise KeyError(f'Missing expected key in jsonData: {e}')
-		
-		df = pd.DataFrame({'value':y_data}, index=timestamps)
-		df.index.name = "HourUTC"
-		return df
+class HistoricalWeatherDataProcessor(DataProcessor):
+	def process_data(self, jsonData:dict, transformer:Transformer, parameter:str)->dict:
+		timestamps = [feature['properties']['from'][:13] for feature in jsonData['features']]
+		values = [feature['properties']['value'] for feature in jsonData['features']]
+		return {'parameterId': parameter,
+				'timestamps':timestamps, 
+				'values':values}
 
 class ForecastDataProcessor(DataProcessor):
 	def process_data(self, jsonData:dict, transformer:Transformer)->pd.DataFrame:
