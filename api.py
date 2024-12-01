@@ -17,7 +17,7 @@ class WeatherRequest(BaseModel):
 class MultipleWeatherRequests(BaseModel):
     items: List[WeatherRequest]
 
-class EnergyRequest(BaseModel):
+class ModelRequest(BaseModel):
     pass
 
 class ForecastRequest(BaseModel):
@@ -56,7 +56,7 @@ async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequest
             if response.status_code !=200:
                 raise HTTPException(status_code=response.status_code, detail=response.text)
             else:
-                return processor.process_data(jsonData=response.json(), 
+                return processor.process_data(json_data=response.json(), 
                                           transformer=transformer, 
                                           parameter=weather_request.parameter)
 
@@ -70,8 +70,8 @@ async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequest
         return {'results': results}
 
 
-@app.post("/energy")
-async def query_energy_api(request:EnergyRequest):
+@app.post("/model")
+async def query_energy_api(request:ModelRequest):
     pass
 
 
@@ -93,18 +93,22 @@ async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequ
             if response.status_code !=200:
                 raise HTTPException(status_code=response.status_code, detail=response.text)
             else:
-                return processor.process_data(jsonData=response.json(),
+                return processor.process_data(json_data=response.json(),
                                                 transformer=transformer,
                                                 parameter=forecast_request.parameter)
 
     if isinstance(request, ForecastRequest):
-        return await fetch_forecast_data(request)
+        result = await fetch_forecast_data(request)
+        return {'results':result}
     elif isinstance(request, MultipleForecastRequests):
         results = []
         for item in request.items:
             result = await fetch_forecast_data(item)
             results.append(result)
-        return {'results': results}
+
+        preditor = PricePredictor('xgboost_model.json')
+        spot_prices = preditor.predict_energy_prices(results)   
+        return {'results': results, 'SpotPriceDKK':spot_prices}
 
 
 def main():
