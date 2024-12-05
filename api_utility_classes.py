@@ -1,6 +1,9 @@
 import pandas as pd
 import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import numpy as np
+from datetime import datetime, timedelta
 from abc import ABC, abstractmethod
 
 class Transformer:
@@ -51,7 +54,6 @@ class ForecastDataProcessor(DataProcessor):
 				'timestamps':spliced_timestamps, 
 				'values':corrected_values}
 
-
 class PricePredictor:
 	def __init__(self, model_path:str)->None:
 		self.model = xgb.Booster()
@@ -89,8 +91,67 @@ class PricePredictor:
 			price_prediction[time] = round(float(price/1000),2)
 		return price_prediction
 
+class EnergyPriceModelTrainer:
+	@staticmethod
+	def train_model(data:pd.DataFrame, 
+					gamma:float, 
+					max_depth:int, 
+					eta:float, 
+					subsample:float, 
+					colsample_bytree:float, 
+					min_child_weight:int,
+					num_rounds:int=1000):
+
+		x = data.drop(columns=['SpotPriceDKK'])
+		y = data['SpotPriceDKK']
+
+		x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+
+		dtrain = xgb.DMatrix(x_train, label=y_train)
+		dtest = xgb.DMatrix(x_test, label=y_test)
+
+		params = {
+			'gamma':gamma,
+			'objective': 'reg:squarederror',
+			'max_depth': max_depth,
+			'eta': eta,
+			'subsample': subsample,
+			'colsample_bytree': colsample_bytree,
+			'min_child_weight': min_child_weight,
+			'eval_metric': 'rmse'  # Set RMSE as the evaluation metric
+			}
+		rounds = num_rounds
+
+		evals = [(dtrain, 'train'), (dtest, 'test')]
+
+		model = xgb.train(
+			params,
+			dtrain,
+			num_rounds,
+			evals=evals,
+			early_stopping_rounds=10,
+			verbose_eval=50
+			)
+		y_pred = model.predict(dtest)
+		model.save_model('xgboost_model_test.json')
+		
+		mse = mean_squared_error(y_test, y_pred)
+		rmse = np.sqrt(mse)
+		mae = mean_absolute_error(y_test, y_pred)
+		r2 = r2_score(y_test, y_pred)
+
+		mean_actual = np.mean(y_test)
+		rmse_percentage = (rmse / mean_actual) * 100
+		return {
+        		'rmse': round(rmse, 2),
+        		'mea': round(mae, 2),
+        		'r2': round(r2, 4),
+        		'rsd': round(rmse_percentage, 2)
+    			}
+
 
 def main():
 	pass
+
 if __name__=="__main__":
 	main()

@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import httpx
-import logging
+import pandas as pd
 from datetime import datetime
 from typing import List, Union
 from api_utility_classes import *
@@ -18,7 +18,12 @@ class MultipleWeatherRequests(BaseModel):
     items: List[WeatherRequest]
 
 class ModelRequest(BaseModel):
-    pass
+    gamma:float
+    eta:float
+    colsample:float
+    max_depth:int
+    subsample:float
+    min_child_weight:int
 
 class ForecastRequest(BaseModel):
     coords:str
@@ -37,13 +42,14 @@ def read_root():
     return {"message":"Conncetion to API established!"}
 
 
-@app.post("/weather")
+@app.get("/weather")
 async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequests]):
     dmi_climate_api_key="855fff42-4838-4bb1-91fd-8655bbd9ecd9"
     climate_url = "https://dmigw.govcloud.dk/v2/climateData/collections/countryValue/items?"
     processor = HistoricalWeatherDataProcessor()
     transformer = Transformer()
     async def fetch_weather_data(weather_request:WeatherRequest):
+        print(weather_request.parameter)
         climate_params = {
                       "limit":weather_request.limit,
                       "timeResolution":weather_request.resolution,
@@ -69,19 +75,14 @@ async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequest
             results.append(result)
         return {'results': results}
 
-
-@app.post("/model")
-async def query_energy_api(request:ModelRequest):
-    pass
-
-
-@app.post("/forecast")
+@app.get("/forecast")
 async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequests]): 
     dmi_forcast_api_key = '37d18777-8ab0-44c9-bb26-113e6925338d'
     forecast_url = 'https://dmigw.govcloud.dk/v1/forecastedr/collections/harmonie_dini_sf/position'
     transformer = Transformer()
     processor = ForecastDataProcessor()
     async def fetch_forecast_data(forecast_request:ForecastRequest):
+        print(forecast_request.parameter)
         forecast_params = {
                             'coords':forecast_request.coords,
                             'crs':forecast_request.crs,
@@ -111,6 +112,21 @@ async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequ
         return {'results': results, 'SpotPriceDKK':spot_prices}
 
 
+@app.post("/model")
+async def query_energy_api(request:ModelRequest):
+    trainer = EnergyPriceModelTrainer()
+    data = pd.read_csv('data_collection - Copy.csv') 
+    print(request)
+    message = trainer.train_model(data, 
+                        request.gamma,
+                        request.max_depth,
+                        request.eta,
+                        request.subsample,
+                        request.colsample,
+                        request.min_child_weight
+                        )
+    return message
+    
 def main():
     pass
 
