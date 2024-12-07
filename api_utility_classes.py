@@ -9,6 +9,12 @@ from abc import ABC, abstractmethod
 class Transformer:
 	@staticmethod
 	def transform(values:list, parameter:str)->list:
+		if values is None:  # Explicitly check for None
+			raise TypeError("The 'values' input cannot be None.")
+		if not values:
+			return []
+		if not all(isinstance(x, (int, float)) for x in values):
+			raise TypeError("All elements in the 'values' list must be numbers.")
 		match parameter:
 			case 'temperature-2m':
 				values_transformed = [round(x-273.15,1) for x in values]
@@ -35,24 +41,39 @@ class DataProcessor(ABC):
 		pass
 
 class HistoricalWeatherDataProcessor(DataProcessor):
-	def process_data(self, json_data:dict, transformer:Transformer, parameter:str)->dict:
-		timestamps = [feature['properties']['from'][:13] for feature in json_data['features']]
-		values = [feature['properties']['value'] for feature in json_data['features']]
-		corrected_values=transformer.transform(values=values, parameter=parameter)
-		return {'parameterId': parameter,
-				'timestamps':timestamps, 
-				'values':corrected_values}
+	def process_data(self, json_data: dict, transformer: Transformer, parameter: str) -> dict:
+		timestamps = []
+		values = []
+		for feature in json_data.get("features", []):
+			props = feature.get("properties", {})
+			# Only include features with both 'from' and 'value' keys
+			if "from" in props and "value" in props:
+				timestamps.append(props["from"][:13])
+				values.append(props["value"])
+
+		if not values:  # Handle empty values
+			return {'parameterId': parameter, 'timestamps': [], 'values': []}
+
+		corrected_values = transformer.transform(values=values, parameter=parameter)
+		return {'parameterId': parameter, 'timestamps': timestamps, 'values': corrected_values}
+
 
 class ForecastDataProcessor(DataProcessor):
-	def process_data(self, json_data:dict, transformer:Transformer, parameter:str)->dict:
-		internal_parameter = list(json_data['parameters'].keys())[0]
-		timestamps = json_data.get('domain', {}).get('axes', {}).get('t', {}).get('values', [])
+	def process_data(self, json_data: dict, transformer: Transformer, parameter: str) -> dict:
+		# Get internal parameter if present
+		internal_parameter = next(iter(json_data.get("parameters", {}).keys()), None)
+
+		# Get timestamps and values with defaults
+		timestamps = json_data.get("domain", {}).get("axes", {}).get("t", {}).get("values", [])
 		spliced_timestamps = [s[:13] for s in timestamps]
-		values = json_data.get('ranges', {}).get(parameter, {}).get('values', [])
-		corrected_values=transformer.transform(values=values, parameter=parameter)
-		return {'parameterId': parameter,
-				'timestamps':spliced_timestamps, 
-				'values':corrected_values}
+		values = json_data.get("ranges", {}).get(parameter, {}).get("values", [])
+
+		if not values:  # Handle empty values
+			return {'parameterId': parameter, 'timestamps': [], 'values': []}
+		
+		corrected_values = transformer.transform(values=values, parameter=parameter)
+		return {'parameterId': parameter, 'timestamps': spliced_timestamps, 'values': corrected_values}
+
 
 class PricePredictor:
 	def __init__(self, model_path:str)->None:
@@ -78,6 +99,9 @@ class PricePredictor:
 					parameter = 'acc_precip'
 				case 'low-cloud-cover':
 					parameter = 'mean_cloud_cover'
+				case _:
+					parameter = entry['parameterId']
+					df_dict[parameter] = entry['values']
 
 			df_dict[parameter] = entry['values']
 
@@ -101,6 +125,11 @@ class EnergyPriceModelTrainer:
 					colsample_bytree:float, 
 					min_child_weight:int,
 					num_rounds:int=1000):
+
+		if data.empty:
+			raise ValueError("Input DataFrame is empty.")
+		if 'SpotPriceDKK' not in data.columns:
+			raise KeyError("'SpotPriceDKK' column is missing in the input DataFrame.")
 
 		x = data.drop(columns=['SpotPriceDKK'])
 		y = data['SpotPriceDKK']
@@ -148,7 +177,6 @@ class EnergyPriceModelTrainer:
         		'r2': round(r2, 4),
         		'rsd': round(rmse_percentage, 2)
     			}
-
 
 def main():
 	pass
