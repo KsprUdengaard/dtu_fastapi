@@ -50,6 +50,7 @@ async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequest
     transformer = Transformer()
     async def fetch_weather_data(weather_request:WeatherRequest):
         print(weather_request.parameter)
+        print(weather_request.time_from)
         climate_params = {
                       "limit":weather_request.limit,
                       "timeResolution":weather_request.resolution,
@@ -81,6 +82,7 @@ async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequ
     forecast_url = 'https://dmigw.govcloud.dk/v1/forecastedr/collections/harmonie_dini_sf/position'
     transformer = Transformer()
     processor = ForecastDataProcessor()
+    preditor = PricePredictor('xgboost_model.json')
     async def fetch_forecast_data(forecast_request:ForecastRequest):
         print(forecast_request.parameter)
         forecast_params = {
@@ -90,6 +92,8 @@ async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequ
                             'api-key':dmi_forcast_api_key
                             }
         async with httpx.AsyncClient() as client:
+            full_url = client.build_request("GET", forecast_url, params=forecast_params).url
+            print(full_url)
             response = await client.get(forecast_url, params=forecast_params)
             if response.status_code !=200:
                 raise HTTPException(status_code=response.status_code, detail=response.text)
@@ -107,7 +111,7 @@ async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequ
             result = await fetch_forecast_data(item)
             results.append(result)
 
-        preditor = PricePredictor('xgboost_model.json')
+        
         spot_prices = preditor.predict_energy_prices(results)   
         return {'results': results, 'SpotPriceDKK':spot_prices}
 
@@ -117,7 +121,7 @@ async def query_energy_api(request:ModelRequest):
     trainer = EnergyPriceModelTrainer()
     data = pd.read_csv('data_collection - Copy.csv') 
     print(request)
-    message = trainer.train_model(data, 
+    train_model = trainer.train_model(data, 
                         request.gamma,
                         request.max_depth,
                         request.eta,
@@ -125,7 +129,7 @@ async def query_energy_api(request:ModelRequest):
                         request.colsample,
                         request.min_child_weight
                         )
-    return message
+    return train_model
     
 def main():
     pass
