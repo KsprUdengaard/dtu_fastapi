@@ -119,7 +119,7 @@ async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequ
 @app.post("/model")
 async def query_energy_api(request:ModelRequest):
     trainer = EnergyPriceModelTrainer()
-    data = pd.read_csv('data_collection - Copy.csv') 
+    data = pd.read_csv('data_collection.csv') 
     print(request)
     train_model = trainer.train_model(data, 
                         request.gamma,

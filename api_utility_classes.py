@@ -162,7 +162,7 @@ class EnergyPriceModelTrainer:
 			verbose_eval=50
 			)
 		y_pred = model.predict(dtest)
-		model.save_model('xgboost_model_test.json')
+		model.save_model('xgboost_model.json')
 		
 		mse = mean_squared_error(y_test, y_pred)
 		rmse = np.sqrt(mse)
