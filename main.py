@@ -59,7 +59,7 @@ async def query_weather_api(request:Union[WeatherRequest, MultipleWeatherRequest
                       "api-key":dmi_climate_api_key
                     }        
         async with httpx.AsyncClient() as client:
-            response = await client.get(climate_url, params=climate_params)
+            response = await client.get(climate_url, params=climate_params, timeout=20.0)
             if response.status_code !=200:
                 raise HTTPException(status_code=response.status_code, detail=response.text)
             else:
@@ -94,7 +94,7 @@ async def query_forecast_api(request:Union[ForecastRequest, MultipleForecastRequ
         async with httpx.AsyncClient() as client:
             full_url = client.build_request("GET", forecast_url, params=forecast_params).url
             print(full_url)
-            response = await client.get(forecast_url, params=forecast_params)
+            response = await client.get(forecast_url, params=forecast_params,timeout=20.0)
             if response.status_code !=200:
                 raise HTTPException(status_code=response.status_code, detail=response.text)
             else:
